@@ -99,16 +99,27 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ====== 触摸事件分发：处理 3 连击和 5 连击 ======
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         if (ev.getAction() == MotionEvent.ACTION_DOWN) {
             long now = System.currentTimeMillis();
             if (now - lastClickTime > CLICK_INTERVAL) {
-                clickCount = 0;
+                clickCount = 0; // 超过0.6秒，重新计数
             }
             lastClickTime = now;
             clickCount++;
 
+            // 连点 3 下：闪现当前网址
+            if (clickCount == 3) {
+                String currentUrl = webView.getUrl();
+                if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("about:blank")) {
+                    currentUrl = primaryUrl;
+                }
+                Toast.makeText(MainActivity.this, "当前网址:\n" + currentUrl, Toast.LENGTH_SHORT).show();
+            }
+
+            // 连点 5 下：弹出修改网址窗口
             if (clickCount >= 5) {
                 clickCount = 0;
                 showEditUrlDialog();
@@ -165,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        finish();
+        finish(); // 切换后台自动退出
     }
 
     @Override
