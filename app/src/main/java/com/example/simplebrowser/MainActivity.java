@@ -38,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private String backup2Url;
     private String backup3Url;
 
-    // 当前所处的层级：0=主，1=备1，2=备2，3=备3
+    // 当前所处的层级：0=主，1=备1(局域网)，2=备2(netlify)，3=备3(pages)
     private int currentLevel = 0;
     private boolean isSwitching = false;
 
@@ -104,6 +104,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ====== 核心：根据不同的层级，返回不同的超时时间 ======
+    private long getTimeoutByLevel(int level) {
+        switch (level) {
+            case 0: return 2000;  // 主网址：2秒
+            case 1: return 2000;  // 局域网备用：2秒（局域网通常很快）
+            case 2: return 3000;  // netlify备用：3秒（海外服务器放宽一点）
+            case 3: return 10000; // pages备用：10秒（作为最慢的保底，给足时间）
+            default: return 2000;
+        }
+    }
+
     private void loadUrlWithTimeout() {
         cancelTimeout();
         isSwitching = false;
@@ -119,16 +130,19 @@ public class MainActivity extends AppCompatActivity {
         timeoutRunnable = new Runnable() {
             @Override
             public void run() {
-                // 2秒超时无响应
+                // 超时无响应
                 switchToNextFallback();
             }
         };
-        timeoutHandler.postDelayed(timeoutRunnable, 2000);
+        
+        // 【修改这里】：使用动态获取的超时时间
+        long timeoutMs = getTimeoutByLevel(currentLevel);
+        timeoutHandler.postDelayed(timeoutRunnable, timeoutMs);
 
         webView.loadUrl(urlToLoad);
     }
 
-    // 核心逻辑：降级到下一个备用网址
+    // 降级到下一个备用网址
     private void switchToNextFallback() {
         if (isSwitching) return;
         isSwitching = true;
@@ -139,8 +153,8 @@ public class MainActivity extends AppCompatActivity {
             webView.stopLoading();
             loadUrlWithTimeout();
         } else {
-            // 已经到了最后一个（pages），如果还失败，就不折腾了，防止死循环
-            Toast.makeText(MainActivity.this, "所有网址均无法访问", Toast.LENGTH_SHORT).show();
+            // 已经到了最后一个（pages 10秒），如果还失败，就不折腾了
+            Toast.makeText(MainActivity.this, "所有网址均无法访问", Toast.LENGTH_LONG).show();
             isSwitching = false;
         }
     }
@@ -201,7 +215,6 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("修改默认网址");
 
-        // 用 ScrollView 包裹，防止 4 个输入框在小屏幕上超出屏幕导致点不到保存
         ScrollView scrollView = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -244,7 +257,7 @@ public class MainActivity extends AppCompatActivity {
                     .apply();
 
             Toast.makeText(MainActivity.this, "已保存，即将从主网址重新加载", Toast.LENGTH_SHORT).show();
-            currentLevel = 0; // 保存后重置，从主网址开始尝试
+            currentLevel = 0; 
             loadUrlWithTimeout();
         });
 
