@@ -64,16 +64,16 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
 
-        // ====== 缩放设置：只保留双指，禁用双击 ======
-        // 1. 允许支持缩放
+        // ====== 核心：防止系统字体/缩放影响网页排版 ======
+        // 强制网页内文字保持 100% 比例，不受系统设置里的“字体大小”影响
+        webView.getSettings().setTextZoom(100);
+        
+        // 允许双指缩放
         webView.getSettings().setSupportZoom(true);
-        // 2. 设置内置缩放控件
         webView.getSettings().setBuiltInZoomControls(true);
-        // 3. 隐藏原生的 +/- 缩放按钮
         webView.getSettings().setDisplayZoomControls(false);
-        // 注意：去掉了 setUseWideViewPort(true) 和 setLoadWithOverviewMode(true)
-        // 这样双击屏幕就不会触发放大，但双指捏合依然有效
-        // ============================================
+        // 不开启 setUseWideViewPort 和 setLoadWithOverviewMode，防止双击放大
+        // ==================================================
 
         webView.setWebViewClient(new WebViewClient() {
 
