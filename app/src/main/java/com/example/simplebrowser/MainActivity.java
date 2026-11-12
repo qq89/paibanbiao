@@ -3,9 +3,11 @@ package com.example.simplebrowser;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -13,6 +15,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -99,13 +102,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ====== 触摸事件分发：处理 3 连击和 5 连击 ======
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         if (ev.getAction() == MotionEvent.ACTION_DOWN) {
             long now = System.currentTimeMillis();
             if (now - lastClickTime > CLICK_INTERVAL) {
-                clickCount = 0; // 超过0.6秒，重新计数
+                clickCount = 0;
             }
             lastClickTime = now;
             clickCount++;
@@ -116,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
                 if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("about:blank")) {
                     currentUrl = primaryUrl;
                 }
-                Toast.makeText(MainActivity.this, "当前网址:\n" + currentUrl, Toast.LENGTH_SHORT).show();
+                showUrlToast(currentUrl);
             }
 
             // 连点 5 下：弹出修改网址窗口
@@ -126,6 +128,26 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return super.dispatchTouchEvent(ev);
+    }
+
+    // 自定义 Toast 防止长网址被截断
+    private void showUrlToast(String url) {
+        Toast toast = new Toast(getApplicationContext());
+        
+        TextView tv = new TextView(MainActivity.this);
+        tv.setText("当前网址:\n" + url);
+        tv.setTextColor(Color.WHITE);
+        tv.setBackgroundColor(Color.parseColor("#CC000000")); // 半透明黑色
+        tv.setPadding(40, 40, 40, 40);
+        tv.setTextSize(16);
+        tv.setGravity(Gravity.CENTER);
+        // 允许自动换行并最多显示5行
+        tv.setMaxLines(5); 
+        
+        toast.setView(tv);
+        toast.setDuration(Toast.LENGTH_SHORT);
+        toast.setGravity(Gravity.CENTER, 0, 0); // 屏幕正中间闪现
+        toast.show();
     }
 
     private void showEditUrlDialog() {
@@ -176,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        finish(); // 切换后台自动退出
+        finish();
     }
 
     @Override
