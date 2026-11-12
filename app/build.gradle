@@ -14,6 +14,14 @@ android {
         versionName "1.0"
     }
 
+    // 新增：正式版配置，体积更小，无调试信息
+    buildTypes {
+        release {
+            minifyEnabled false // 不混淆代码，防止 WebView 出错
+            signingConfig signingConfigs.debug // 自动使用默认签名，方便直接安装
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
