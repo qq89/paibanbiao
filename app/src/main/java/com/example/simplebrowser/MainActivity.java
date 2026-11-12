@@ -6,19 +6,19 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
+import android.view.MotionEvent;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
 
-    // ====== 默认网址（首次打开使用，之后可在APP内修改）======
     private static final String DEFAULT_PRIMARY = "http://jjjjjj8889.gicp.net:28136/schedule";
     private static final String DEFAULT_BACKUP  = "http://192.168.66.44:28136/schedule";
 
@@ -27,15 +27,13 @@ public class MainActivity extends AppCompatActivity {
     private String primaryUrl;
     private String backupUrl;
 
-    // 超时控制
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
     private boolean fallbackTriggered = false;
 
-    // 5次点击修改网址
     private int clickCount = 0;
     private long lastClickTime = 0;
-    private static final long CLICK_INTERVAL = 600; // 600ms内连续点击才算
+    private static final long CLICK_INTERVAL = 600;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,22 +52,17 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                // 页面加载完成，取消超时计时器
                 cancelTimeout();
                 fallbackTriggered = false;
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                // 主网址发生网络错误时立即切换（不一定等到2秒）
                 if (!fallbackTriggered && request.isForMainFrame()) {
                     switchToBackup();
                 }
             }
         });
-
-        // 用于5次点击修改网址：点击WebView本身
-        webView.setOnClickListener(v -> handleSecretClick());
 
         loadPrimaryWithTimeout();
     }
@@ -78,13 +71,14 @@ public class MainActivity extends AppCompatActivity {
         fallbackTriggered = false;
         cancelTimeout();
 
-        timeoutRunnable = () -> {
-            if (!fallbackTriggered) {
-                // 2秒内没有加载完成，切换到备用网址
-                switchToBackup();
+        timeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!fallbackTriggered) {
+                    switchToBackup();
+                }
             }
         };
-        // 2000毫秒 = 2秒
         timeoutHandler.postDelayed(timeoutRunnable, 2000);
 
         webView.loadUrl(primaryUrl);
@@ -105,13 +99,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ====== 重写触摸分发事件，确保连续快速点击可靠触发 ======
     @Override
-    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
-        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
             long now = System.currentTimeMillis();
             if (now - lastClickTime > CLICK_INTERVAL) {
-                clickCount = 0; // 间隔超过600ms，重新计数
+                clickCount = 0;
             }
             lastClickTime = now;
             clickCount++;
@@ -128,9 +121,8 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("修改默认网址");
 
-        // 用一个简单的纵向布局放两个输入框
-        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
-        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(50, 20, 50, 20);
 
         final EditText inputPrimary = new EditText(this);
@@ -170,11 +162,9 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
-    // ====== 切换到后台就“自杀” ======
     @Override
     protected void onPause() {
         super.onPause();
-        // 老人查看完排班表，切到后台即关闭，不占资源
         finish();
     }
 
