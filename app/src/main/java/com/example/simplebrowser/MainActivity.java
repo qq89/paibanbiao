@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.webkit.WebResourceError;
@@ -30,6 +31,11 @@ public class MainActivity extends AppCompatActivity {
     private static final String DEFAULT_BACKUP2 = "https://espnote.netlify.app";
     private static final String DEFAULT_BACKUP3 = "https://espnote.pages.dev";
 
+    // ====== 连击间隔默认值 ======
+    private static final int DEFAULT_CLICK_INTERVAL = 200; 
+    private static final int MIN_CLICK_INTERVAL = 150;
+    private static final int MAX_CLICK_INTERVAL = 800;
+
     private WebView webView;
     private SharedPreferences prefs;
     
@@ -37,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
     private String backup1Url;
     private String backup2Url;
     private String backup3Url;
+    private int currentClickInterval;
 
     private int currentLevel = 0;
     private boolean isSwitching = false;
@@ -44,9 +51,10 @@ public class MainActivity extends AppCompatActivity {
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
 
+    // 连击和滑动检测相关
     private int clickCount = 0;
     private long lastClickTime = 0;
-    private static final long CLICK_INTERVAL = 600;
+    private float downX, downY; // 记录按下的坐标
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
         backup1Url = prefs.getString("backup1_url", DEFAULT_BACKUP1);
         backup2Url = prefs.getString("backup2_url", DEFAULT_BACKUP2);
         backup3Url = prefs.getString("backup3_url", DEFAULT_BACKUP3);
+        currentClickInterval = prefs.getInt("click_interval", DEFAULT_CLICK_INTERVAL);
 
         webView = new WebView(this);
         setContentView(webView);
@@ -64,16 +73,13 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
 
-        // ====== 核心：防止系统字体/缩放影响网页排版 ======
-        // 强制网页内文字保持 100% 比例，不受系统设置里的“字体大小”影响
+        // 强制网页内文字保持 100%，不受系统影响
         webView.getSettings().setTextZoom(100);
         
-        // 允许双指缩放
+        // 允许双指缩放，禁用双击放大
         webView.getSettings().setSupportZoom(true);
         webView.getSettings().setBuiltInZoomControls(true);
         webView.getSettings().setDisplayZoomControls(false);
-        // 不开启 setUseWideViewPort 和 setLoadWithOverviewMode，防止双击放大
-        // ==================================================
 
         webView.setWebViewClient(new WebViewClient() {
 
@@ -115,11 +121,11 @@ public class MainActivity extends AppCompatActivity {
 
     private long getTimeoutByLevel(int level) {
         switch (level) {
-            case 0: return 2000;  
-            case 1: return 2000;  
-            case 2: return 3000;  
-            case 3: return 10000; 
-            default: return 2000;
+            case 0: return 1500;  // 【修改】主网址：1.5秒
+            case 1: return 1500;  // 【修改】局域网备用：1.5秒
+            case 2: return 3000;  // netlify备用：3秒
+            case 3: return 10000; // pages备用：10秒
+            default: return 1500;
         }
     }
 
@@ -169,30 +175,63 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ====== 核心修改：结合滑动距离判断，防止滑屏误触 ======
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
-            long now = System.currentTimeMillis();
-            if (now - lastClickTime > CLICK_INTERVAL) {
-                clickCount = 0;
-            }
-            lastClickTime = now;
-            clickCount++;
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                // 记录按下时的坐标
+                downX = ev.getX();
+                downY = ev.getY();
+                break;
 
-            if (clickCount == 3) {
-                String currentUrl = webView.getUrl();
-                if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("about:blank")) {
-                    currentUrl = getUrlByLevel(currentLevel);
+            case MotionEvent.ACTION_UP:
+                // 手指抬起时，计算移动距离
+                float upX = ev.getX();
+                float upY = ev.getY();
+                float deltaX = Math.abs(upX - downX);
+                float deltaY = Math.abs(upY - downY);
+
+                // 如果移动距离小于 50 像素，说明是原地点按，不是滑动
+                if (deltaX < 50 && deltaY < 50) {
+                    handleSecretClick();
+                } else {
+                    // 如果发生了滑动，直接重置连击计数
+                    clickCount = 0;
                 }
-                showUrlToast(currentUrl);
-            }
+                break;
 
-            if (clickCount >= 5) {
+            case MotionEvent.ACTION_CANCEL:
+                // 触摸被中断，重置
                 clickCount = 0;
-                showEditUrlDialog();
-            }
+                break;
         }
         return super.dispatchTouchEvent(ev);
+    }
+
+    private void handleSecretClick() {
+        long now = System.currentTimeMillis();
+        // 超过设定的连击间隔，重新计数
+        if (now - lastClickTime > currentClickInterval) {
+            clickCount = 0;
+        }
+        lastClickTime = now;
+        clickCount++;
+
+        // 连点 3 下：闪现当前网址
+        if (clickCount == 3) {
+            String currentUrl = webView.getUrl();
+            if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("about:blank")) {
+                currentUrl = getUrlByLevel(currentLevel);
+            }
+            showUrlToast(currentUrl);
+        }
+
+        // 连点 5 下：弹出修改网址窗口
+        if (clickCount >= 5) {
+            clickCount = 0;
+            showEditUrlDialog();
+        }
     }
 
     private void showUrlToast(String url) {
@@ -214,7 +253,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showEditUrlDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("修改默认网址");
+        builder.setTitle("修改网址和设置");
 
         ScrollView scrollView = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
@@ -241,6 +280,13 @@ public class MainActivity extends AppCompatActivity {
         inputBackup3.setHint("备用3 (pages 保底)");
         layout.addView(inputBackup3);
 
+        // 【新增】：连击间隔设置框
+        final EditText inputInterval = new EditText(this);
+        inputInterval.setText(String.valueOf(currentClickInterval));
+        inputInterval.setHint("连击间隔(150-800毫秒)");
+        inputInterval.setInputType(InputType.TYPE_CLASS_NUMBER); // 强制弹出纯数字键盘
+        layout.addView(inputInterval);
+
         scrollView.addView(layout);
         builder.setView(scrollView);
 
@@ -250,14 +296,31 @@ public class MainActivity extends AppCompatActivity {
             backup2Url = inputBackup2.getText().toString().trim();
             backup3Url = inputBackup3.getText().toString().trim();
 
+            // 【新增】：处理并校验连击间隔
+            int newInterval;
+            try {
+                newInterval = Integer.parseInt(inputInterval.getText().toString().trim());
+            } catch (Exception e) {
+                newInterval = DEFAULT_CLICK_INTERVAL; // 输入乱码时恢复默认200
+            }
+            
+            // 强制限制在 150~800 之间
+            if (newInterval < MIN_CLICK_INTERVAL) {
+                newInterval = MIN_CLICK_INTERVAL;
+            } else if (newInterval > MAX_CLICK_INTERVAL) {
+                newInterval = MAX_CLICK_INTERVAL;
+            }
+            currentClickInterval = newInterval;
+
             prefs.edit()
                     .putString("primary_url", primaryUrl)
                     .putString("backup1_url", backup1Url)
                     .putString("backup2_url", backup2Url)
                     .putString("backup3_url", backup3Url)
+                    .putInt("click_interval", currentClickInterval) // 保存间隔
                     .apply();
 
-            Toast.makeText(MainActivity.this, "已保存，即将从主网址重新加载", Toast.LENGTH_SHORT).show();
+            Toast.makeText(MainActivity.this, "设置已保存 (连击间隔: " + currentClickInterval + "ms)", Toast.LENGTH_SHORT).show();
             currentLevel = 0; 
             loadUrlWithTimeout();
         });
