@@ -130,7 +130,7 @@ public class MainActivity extends AppCompatActivity {
         return super.dispatchTouchEvent(ev);
     }
 
-    // 自定义 Toast 防止长网址被截断
+    // 自定义 Toast 防止长网址被截断，并放在屏幕底部
     private void showUrlToast(String url) {
         Toast toast = new Toast(getApplicationContext());
         
@@ -141,12 +141,14 @@ public class MainActivity extends AppCompatActivity {
         tv.setPadding(40, 40, 40, 40);
         tv.setTextSize(16);
         tv.setGravity(Gravity.CENTER);
-        // 允许自动换行并最多显示5行
         tv.setMaxLines(5); 
         
         toast.setView(tv);
         toast.setDuration(Toast.LENGTH_SHORT);
-        toast.setGravity(Gravity.CENTER, 0, 0); // 屏幕正中间闪现
+        
+        // 【修改这里】：将显示位置改为底部，0, 200 代表距离屏幕底部往上 200 像素（避开底部导航栏）
+        toast.setGravity(Gravity.BOTTOM, 0, 200); 
+        
         toast.show();
     }
 
