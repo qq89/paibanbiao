@@ -11,10 +11,12 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -22,17 +24,26 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
 
+    // ====== 四个默认网址 ======
     private static final String DEFAULT_PRIMARY = "http://jjjjjj8889.gicp.net:28136/schedule";
-    private static final String DEFAULT_BACKUP  = "http://192.168.66.44:28136/schedule";
+    private static final String DEFAULT_BACKUP1 = "http://192.168.66.44:28136/schedule";
+    private static final String DEFAULT_BACKUP2 = "https://espnote.netlify.app";
+    private static final String DEFAULT_BACKUP3 = "https://espnote.pages.dev";
 
     private WebView webView;
     private SharedPreferences prefs;
+    
     private String primaryUrl;
-    private String backupUrl;
+    private String backup1Url;
+    private String backup2Url;
+    private String backup3Url;
+
+    // 当前所处的层级：0=主，1=备1，2=备2，3=备3
+    private int currentLevel = 0;
+    private boolean isSwitching = false;
 
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
-    private boolean fallbackTriggered = false;
 
     private int clickCount = 0;
     private long lastClickTime = 0;
@@ -44,7 +55,9 @@ public class MainActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("app_config", Context.MODE_PRIVATE);
         primaryUrl = prefs.getString("primary_url", DEFAULT_PRIMARY);
-        backupUrl  = prefs.getString("backup_url",  DEFAULT_BACKUP);
+        backup1Url = prefs.getString("backup1_url", DEFAULT_BACKUP1);
+        backup2Url = prefs.getString("backup2_url", DEFAULT_BACKUP2);
+        backup3Url = prefs.getString("backup3_url", DEFAULT_BACKUP3);
 
         webView = new WebView(this);
         setContentView(webView);
@@ -56,43 +69,80 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 cancelTimeout();
-                fallbackTriggered = false;
+                isSwitching = false;
             }
 
+            // 捕获网络错误
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (!fallbackTriggered && request.isForMainFrame()) {
-                    switchToBackup();
+                if (!isSwitching && request.isForMainFrame()) {
+                    switchToNextFallback();
+                }
+            }
+
+            // 捕获 HTTP 状态码错误（如 404、500）
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                super.onReceivedHttpError(view, request, errorResponse);
+                if (!isSwitching && request.isForMainFrame()) {
+                    switchToNextFallback();
                 }
             }
         });
 
-        loadPrimaryWithTimeout();
+        currentLevel = 0;
+        loadUrlWithTimeout();
     }
 
-    private void loadPrimaryWithTimeout() {
-        fallbackTriggered = false;
+    private String getUrlByLevel(int level) {
+        switch (level) {
+            case 0: return primaryUrl;
+            case 1: return backup1Url;
+            case 2: return backup2Url;
+            case 3: return backup3Url;
+            default: return null;
+        }
+    }
+
+    private void loadUrlWithTimeout() {
         cancelTimeout();
+        isSwitching = false;
+        
+        String urlToLoad = getUrlByLevel(currentLevel);
+
+        // 如果当前网址为空（比如用户清空了某个备用网址），直接跳到下一个
+        if (urlToLoad == null || urlToLoad.trim().isEmpty()) {
+            switchToNextFallback();
+            return;
+        }
 
         timeoutRunnable = new Runnable() {
             @Override
             public void run() {
-                if (!fallbackTriggered) {
-                    switchToBackup();
-                }
+                // 2秒超时无响应
+                switchToNextFallback();
             }
         };
         timeoutHandler.postDelayed(timeoutRunnable, 2000);
 
-        webView.loadUrl(primaryUrl);
+        webView.loadUrl(urlToLoad);
     }
 
-    private void switchToBackup() {
-        if (fallbackTriggered) return;
-        fallbackTriggered = true;
+    // 核心逻辑：降级到下一个备用网址
+    private void switchToNextFallback() {
+        if (isSwitching) return;
+        isSwitching = true;
         cancelTimeout();
-        webView.stopLoading();
-        webView.loadUrl(backupUrl);
+
+        if (currentLevel < 3) {
+            currentLevel++;
+            webView.stopLoading();
+            loadUrlWithTimeout();
+        } else {
+            // 已经到了最后一个（pages），如果还失败，就不折腾了，防止死循环
+            Toast.makeText(MainActivity.this, "所有网址均无法访问", Toast.LENGTH_SHORT).show();
+            isSwitching = false;
+        }
     }
 
     private void cancelTimeout() {
@@ -116,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
             if (clickCount == 3) {
                 String currentUrl = webView.getUrl();
                 if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("about:blank")) {
-                    currentUrl = primaryUrl;
+                    currentUrl = getUrlByLevel(currentLevel);
                 }
                 showUrlToast(currentUrl);
             }
@@ -130,14 +180,12 @@ public class MainActivity extends AppCompatActivity {
         return super.dispatchTouchEvent(ev);
     }
 
-    // 自定义 Toast 防止长网址被截断，并放在屏幕底部
     private void showUrlToast(String url) {
         Toast toast = new Toast(getApplicationContext());
-        
         TextView tv = new TextView(MainActivity.this);
         tv.setText("当前网址:\n" + url);
         tv.setTextColor(Color.WHITE);
-        tv.setBackgroundColor(Color.parseColor("#CC000000")); // 半透明黑色
+        tv.setBackgroundColor(Color.parseColor("#CC000000"));
         tv.setPadding(40, 40, 40, 40);
         tv.setTextSize(16);
         tv.setGravity(Gravity.CENTER);
@@ -145,10 +193,7 @@ public class MainActivity extends AppCompatActivity {
         
         toast.setView(tv);
         toast.setDuration(Toast.LENGTH_SHORT);
-        
-        // 【修改这里】：将显示位置改为底部，0, 200 代表距离屏幕底部往上 200 像素（避开底部导航栏）
         toast.setGravity(Gravity.BOTTOM, 0, 200); 
-        
         toast.show();
     }
 
@@ -156,41 +201,51 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("修改默认网址");
 
+        // 用 ScrollView 包裹，防止 4 个输入框在小屏幕上超出屏幕导致点不到保存
+        ScrollView scrollView = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(50, 20, 50, 20);
 
         final EditText inputPrimary = new EditText(this);
         inputPrimary.setText(primaryUrl);
-        inputPrimary.setHint("主网址");
+        inputPrimary.setHint("主网址 (第一顺位)");
         layout.addView(inputPrimary);
 
-        final EditText inputBackup = new EditText(this);
-        inputBackup.setText(backupUrl);
-        inputBackup.setHint("备用网址");
-        layout.addView(inputBackup);
+        final EditText inputBackup1 = new EditText(this);
+        inputBackup1.setText(backup1Url);
+        inputBackup1.setHint("备用1 (局域网)");
+        layout.addView(inputBackup1);
 
-        builder.setView(layout);
+        final EditText inputBackup2 = new EditText(this);
+        inputBackup2.setText(backup2Url);
+        inputBackup2.setHint("备用2 (netlify)");
+        layout.addView(inputBackup2);
+
+        final EditText inputBackup3 = new EditText(this);
+        inputBackup3.setText(backup3Url);
+        inputBackup3.setHint("备用3 (pages 保底)");
+        layout.addView(inputBackup3);
+
+        scrollView.addView(layout);
+        builder.setView(scrollView);
 
         builder.setPositiveButton("保存并重新加载", (dialog, which) -> {
-            String newPrimary = inputPrimary.getText().toString().trim();
-            String newBackup  = inputBackup.getText().toString().trim();
-
-            if (newPrimary.isEmpty() || newBackup.isEmpty()) {
-                Toast.makeText(MainActivity.this, "网址不能为空", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            primaryUrl = newPrimary;
-            backupUrl  = newBackup;
+            primaryUrl = inputPrimary.getText().toString().trim();
+            backup1Url = inputBackup1.getText().toString().trim();
+            backup2Url = inputBackup2.getText().toString().trim();
+            backup3Url = inputBackup3.getText().toString().trim();
 
             prefs.edit()
                     .putString("primary_url", primaryUrl)
-                    .putString("backup_url", backupUrl)
+                    .putString("backup1_url", backup1Url)
+                    .putString("backup2_url", backup2Url)
+                    .putString("backup3_url", backup3Url)
                     .apply();
 
-            Toast.makeText(MainActivity.this, "已保存，即将重新加载", Toast.LENGTH_SHORT).show();
-            loadPrimaryWithTimeout();
+            Toast.makeText(MainActivity.this, "已保存，即将从主网址重新加载", Toast.LENGTH_SHORT).show();
+            currentLevel = 0; // 保存后重置，从主网址开始尝试
+            loadUrlWithTimeout();
         });
 
         builder.setNegativeButton("取消", null);
@@ -200,7 +255,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        finish();
+        finish(); 
     }
 
     @Override
