@@ -38,7 +38,6 @@ public class MainActivity extends AppCompatActivity {
     private String backup2Url;
     private String backup3Url;
 
-    // 当前所处的层级：0=主，1=备1(局域网)，2=备2(netlify)，3=备3(pages)
     private int currentLevel = 0;
     private boolean isSwitching = false;
 
@@ -64,6 +63,18 @@ public class MainActivity extends AppCompatActivity {
 
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+
+        // ====== 缩放设置：只保留双指，禁用双击 ======
+        // 1. 允许支持缩放
+        webView.getSettings().setSupportZoom(true);
+        // 2. 设置内置缩放控件
+        webView.getSettings().setBuiltInZoomControls(true);
+        // 3. 隐藏原生的 +/- 缩放按钮
+        webView.getSettings().setDisplayZoomControls(false);
+        // 注意：去掉了 setUseWideViewPort(true) 和 setLoadWithOverviewMode(true)
+        // 这样双击屏幕就不会触发放大，但双指捏合依然有效
+        // ============================================
+
         webView.setWebViewClient(new WebViewClient() {
 
             @Override
@@ -72,7 +83,6 @@ public class MainActivity extends AppCompatActivity {
                 isSwitching = false;
             }
 
-            // 捕获网络错误
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (!isSwitching && request.isForMainFrame()) {
@@ -80,7 +90,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 捕获 HTTP 状态码错误（如 404、500）
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
                 super.onReceivedHttpError(view, request, errorResponse);
@@ -104,13 +113,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ====== 核心：根据不同的层级，返回不同的超时时间 ======
     private long getTimeoutByLevel(int level) {
         switch (level) {
-            case 0: return 2000;  // 主网址：2秒
-            case 1: return 2000;  // 局域网备用：2秒（局域网通常很快）
-            case 2: return 3000;  // netlify备用：3秒（海外服务器放宽一点）
-            case 3: return 10000; // pages备用：10秒（作为最慢的保底，给足时间）
+            case 0: return 2000;  
+            case 1: return 2000;  
+            case 2: return 3000;  
+            case 3: return 10000; 
             default: return 2000;
         }
     }
@@ -121,7 +129,6 @@ public class MainActivity extends AppCompatActivity {
         
         String urlToLoad = getUrlByLevel(currentLevel);
 
-        // 如果当前网址为空（比如用户清空了某个备用网址），直接跳到下一个
         if (urlToLoad == null || urlToLoad.trim().isEmpty()) {
             switchToNextFallback();
             return;
@@ -130,19 +137,16 @@ public class MainActivity extends AppCompatActivity {
         timeoutRunnable = new Runnable() {
             @Override
             public void run() {
-                // 超时无响应
                 switchToNextFallback();
             }
         };
         
-        // 【修改这里】：使用动态获取的超时时间
         long timeoutMs = getTimeoutByLevel(currentLevel);
         timeoutHandler.postDelayed(timeoutRunnable, timeoutMs);
 
         webView.loadUrl(urlToLoad);
     }
 
-    // 降级到下一个备用网址
     private void switchToNextFallback() {
         if (isSwitching) return;
         isSwitching = true;
@@ -153,7 +157,6 @@ public class MainActivity extends AppCompatActivity {
             webView.stopLoading();
             loadUrlWithTimeout();
         } else {
-            // 已经到了最后一个（pages 10秒），如果还失败，就不折腾了
             Toast.makeText(MainActivity.this, "所有网址均无法访问", Toast.LENGTH_LONG).show();
             isSwitching = false;
         }
@@ -176,7 +179,6 @@ public class MainActivity extends AppCompatActivity {
             lastClickTime = now;
             clickCount++;
 
-            // 连点 3 下：闪现当前网址
             if (clickCount == 3) {
                 String currentUrl = webView.getUrl();
                 if (currentUrl == null || currentUrl.isEmpty() || currentUrl.equals("about:blank")) {
@@ -185,7 +187,6 @@ public class MainActivity extends AppCompatActivity {
                 showUrlToast(currentUrl);
             }
 
-            // 连点 5 下：弹出修改网址窗口
             if (clickCount >= 5) {
                 clickCount = 0;
                 showEditUrlDialog();
