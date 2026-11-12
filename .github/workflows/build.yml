@@ -20,6 +20,15 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # 关键步骤1：如果项目中没有 gradlew，则自动生成一个
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.5
+        if: hashFiles('gradlew') == ''
+
+      # 关键步骤2：赋予 gradlew 执行权限
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
