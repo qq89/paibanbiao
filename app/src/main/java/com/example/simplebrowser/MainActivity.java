@@ -105,19 +105,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ====== 5次连续点击，弹出修改网址窗口 ======
-    private void handleSecretClick() {
-        long now = System.currentTimeMillis();
-        if (now - lastClickTime > CLICK_INTERVAL) {
-            clickCount = 0; // 间隔太久，重新计数
-        }
-        lastClickTime = now;
-        clickCount++;
+    // ====== 重写触摸分发事件，确保连续快速点击可靠触发 ======
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+            long now = System.currentTimeMillis();
+            if (now - lastClickTime > CLICK_INTERVAL) {
+                clickCount = 0; // 间隔超过600ms，重新计数
+            }
+            lastClickTime = now;
+            clickCount++;
 
-        if (clickCount >= 5) {
-            clickCount = 0;
-            showEditUrlDialog();
+            if (clickCount >= 5) {
+                clickCount = 0;
+                showEditUrlDialog();
+            }
         }
+        return super.dispatchTouchEvent(ev);
     }
 
     private void showEditUrlDialog() {
