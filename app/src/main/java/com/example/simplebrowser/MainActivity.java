@@ -117,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
 
     private long getTimeoutByLevel(int level) {
         switch (level) {
-            case 0: return 1000;   // 外网端口映射，保留余量兼容手机流量
+            case 0: return 1200;   // 外网端口映射，保留余量兼容手机流量
             case 1: return 600;    // 局域网直连，600ms 无响应说明 ESP 已挂
             case 2: return 3000;  
             case 3: return 10000; 
